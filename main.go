@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
+	// "fmt"
 	// "log"
 	"net/http"
-	"os"
+	// "os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -24,61 +24,55 @@ func main() {
 
 	r.GET("/rooms", getRooms)
 
-	r.Run("0.0.0.0:" + os.Getenv("PORT"))
+	r.Run(":8080")
 }
 
 func getRooms(c *gin.Context) {
-	ctx := context.Background()
-	srv, err := sheets.NewService(ctx, option.WithCredentialsFile("./creds2.json"))
-	if err != nil {
-		fmt.Println("Unable to retrieve Sheets client: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error   sheet": err})
+    ctx := context.Background()
+    srv, err := sheets.NewService(ctx, option.WithCredentialsFile("./creds2.json"))
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to retrieve Sheets client: " + err.Error()})
+        return
+    }
 
-	}
-	fmt.Println("here")
+    spreadsheetId := "1eivXSkSQs37JfPOQ6YME2piD71XxbW73mq5fdKhkwM4"
+    readRange := "Rooms!A2:K"
 
-	spreadsheetId := "1eivXSkSQs37JfPOQ6YME2piD71XxbW73mq5fdKhkwM4"
-	readRange := "Rooms!A2:K"
+    resp, err := srv.Spreadsheets.Values.Get(spreadsheetId, readRange).Do()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Error retrieving from sheet: " + err.Error()})
+        return
+    }
 
-	resp, err := srv.Spreadsheets.Values.Get(spreadsheetId, readRange).Do()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error retrieving from sheet": err})
-		return
-	}
+    if len(resp.Values) == 0 {
+        c.JSON(http.StatusNotFound, gin.H{"message": "No data found."})
+        return
+    }
 
-	if len(resp.Values) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"message": "No data found."})
-		return
-	}
+    availability := c.DefaultQuery("Availability", "Available")
 
-	// Get query parameters
-	availability := c.DefaultQuery("Availability", "Available")
+    var filteredRooms []Room
+    for _, row := range resp.Values {
+        if len(row) < 11 {
+            continue // Skip rows with insufficient data
+        }
+        if matchesFilters(row, c) && row[9] == availability {
+            imageUrls := []string{}
+            if imageUrlStr, ok := row[10].(string); ok {
+                imageUrls = strings.Split(imageUrlStr, ",")
+            }
+            area, _ := row[5].(string)
+            address, _ := row[4].(string)
+            filteredRooms = append(filteredRooms, Room{
+                ImageUrls: imageUrls,
+                Area:      area,
+                Address:   address,
+            })
+        }
+    }
 
-	var filteredRooms []Room
-	for _, row := range resp.Values {
-		// if len(row) < 12 {
-		// 	continue // Skip rows with insufficient data
-		// }
-
-		fmt.Println(row)
-		if matchesFilters(row, c) && row[9] == availability {
-
-			imageUrls := []string{}
-			if row[10] != nil {
-				imageUrls = strings.Split(row[10].(string), ",")
-			}
-			fmt.Println("[]", imageUrls)
-			filteredRooms = append(filteredRooms, Room{
-				ImageUrls: imageUrls,
-				Area:      row[5].(string),
-				Address:   row[4].(string),
-			})
-		}
-	}
-
-	c.JSON(http.StatusOK, filteredRooms)
+    c.JSON(http.StatusOK, filteredRooms)
 }
-
 func matchesFilters(row []interface{}, c *gin.Context) bool {
 
 	filters := map[string]int{
@@ -88,7 +82,7 @@ func matchesFilters(row []interface{}, c *gin.Context) bool {
 		"BachelorsAllowed": 6,
 		"Furnished":        7,
 		"Gender":           8,
-		"Availablity":      9,
+		"Availability":      9,
 	}
 
 	for param, index := range filters {
