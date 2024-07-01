@@ -35,7 +35,7 @@ func getRooms(c *gin.Context) {
         return
     }
 
-    spreadsheetId := "1eivXSkSQs37JfPOQ6YME2piD71XxbW73mq5fdKhkwM4"
+    spreadsheetId := "1u6NPfLncyDlqeSfFq-DB3csjSQTaFTAUePrU0eNXlJY"
     readRange := "Rooms!A2:K"
 
     resp, err := srv.Spreadsheets.Values.Get(spreadsheetId, readRange).Do()
